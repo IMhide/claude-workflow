@@ -49,9 +49,8 @@ jobs:
 
       - name: Run Performance Review
         uses: anthropics/claude-code-action@v1
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             Perform a comprehensive performance review of the repository **${{ env.TARGET_REPO }}** (branch: ${{ env.TARGET_REF }}). Analyze the codebase and provide actionable recommendations.
 
