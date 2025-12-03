@@ -34,6 +34,12 @@ jobs:
       TARGET_REPO: ${{ github.event.client_payload.target_repo || github.event.inputs.target_repo }}
       TARGET_REF: ${{ github.event.client_payload.target_ref || github.event.inputs.target_ref || 'main' }}
     steps:
+      - name: Debug info
+        run: |
+          echo "Target repo: ${{ env.TARGET_REPO }}"
+          echo "Target ref: ${{ env.TARGET_REF }}"
+          echo "GH_PAT is set: ${{ secrets.GH_PAT != '' }}"
+
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
