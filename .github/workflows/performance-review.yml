@@ -1,0 +1,85 @@
+name: Performance Review
+
+on:
+  # Trigger via API call
+  repository_dispatch:
+    types: [performance-review]
+  # Also allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      focus_areas:
+        description: 'Specific areas to focus the review on (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  performance-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Performance Review
+        uses: anthropics/claude-code-action@v1
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        with:
+          prompt: |
+            Perform a comprehensive performance review of this application. Analyze the codebase and provide actionable recommendations.
+
+            ## Review Focus Areas
+            ${{ github.event.client_payload.focus_areas || github.event.inputs.focus_areas || 'All areas' }}
+
+            ## Analysis Tasks
+
+            1. **Code Performance Analysis**
+               - Identify performance bottlenecks in the code
+               - Look for inefficient algorithms or data structures
+               - Check for unnecessary computations or redundant operations
+               - Review loop efficiency and potential optimizations
+
+            2. **Memory & Resource Usage**
+               - Identify potential memory leaks
+               - Check for proper resource cleanup (file handles, connections, etc.)
+               - Review object allocation patterns
+               - Look for opportunities to reduce memory footprint
+
+            3. **Database & I/O Operations**
+               - Review database queries for N+1 problems
+               - Check for missing indexes or inefficient queries
+               - Identify unnecessary I/O operations
+               - Review caching strategies and opportunities
+
+            4. **Async & Concurrency**
+               - Check for blocking operations that could be async
+               - Review thread safety and race conditions
+               - Identify parallelization opportunities
+               - Check for deadlock potential
+
+            5. **Frontend Performance** (if applicable)
+               - Review bundle size and code splitting
+               - Check for render performance issues
+               - Identify unnecessary re-renders
+               - Review asset optimization
+
+            6. **API & Network**
+               - Check for inefficient API calls
+               - Review payload sizes
+               - Identify opportunities for batching or caching
+
+            ## Output Format
+
+            Please provide your findings in a structured report with:
+            - **Executive Summary**: High-level overview of performance health
+            - **Critical Issues**: Problems that need immediate attention
+            - **Recommendations**: Prioritized list of improvements with estimated impact
+            - **Quick Wins**: Easy fixes with good performance gains
+            - **Code Examples**: Specific before/after code suggestions where applicable
+
+            Create a GitHub issue with your complete performance review report.
+          claude_args: "--model claude-sonnet-4-20250514"
