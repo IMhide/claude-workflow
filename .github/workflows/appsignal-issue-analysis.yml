@@ -52,23 +52,31 @@ jobs:
             exit 1
           fi
 
+      - name: Pull AppSignal MCP Docker image
+        run: docker pull appsignal/mcp:latest
+
+      - name: Create MCP config file
+        run: |
+          cat > /tmp/mcp-config.json << 'EOF'
+          {
+            "mcpServers": {
+              "appsignal": {
+                "command": "docker",
+                "args": ["run", "-i", "--rm", "-e", "APPSIGNAL_API_KEY", "appsignal/mcp:latest"],
+                "env": {
+                  "APPSIGNAL_API_KEY": "${{ secrets.APPSIGNAL_API_KEY }}"
+                }
+              }
+            }
+          }
+          EOF
+          echo "MCP config created"
+
       - name: Run AppSignal Issue Analysis
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
-          mcp_config: |
-            {
-              "mcpServers": {
-                "appsignal": {
-                  "command": "docker",
-                  "args": ["run", "-i", "--rm", "-e", "APPSIGNAL_API_KEY", "appsignal/mcp:latest"],
-                  "env": {
-                    "APPSIGNAL_API_KEY": "${{ secrets.APPSIGNAL_API_KEY }}"
-                  }
-                }
-              }
-            }
           prompt: |
             Analyze AppSignal performance issue **#${{ env.ISSUE_ID }}** and provide a detailed report.
 
@@ -136,4 +144,7 @@ jobs:
             - Success metrics to track after fixes
 
             Output your complete analysis report. Format it as a detailed markdown document.
-          claude_args: "--model claude-sonnet-4-20250514"
+          claude_args: |
+            --model claude-sonnet-4-20250514
+            --mcp-config /tmp/mcp-config.json
+            --allowedTools "mcp__appsignal__*"
