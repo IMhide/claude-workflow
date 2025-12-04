@@ -1,0 +1,139 @@
+name: AppSignal Issue Analysis
+
+on:
+  # Trigger via API call
+  repository_dispatch:
+    types: [appsignal-issue-analysis]
+  # Also allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      issue_id:
+        description: 'AppSignal performance issue ID'
+        required: true
+        type: string
+      app_id:
+        description: 'AppSignal App ID (optional, uses default if not specified)'
+        required: false
+        type: string
+      include_samples:
+        description: 'Include sample traces in analysis'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  appsignal-issue-analysis:
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_ID: ${{ github.event.client_payload.issue_id || github.event.inputs.issue_id }}
+      APP_ID: ${{ github.event.client_payload.app_id || github.event.inputs.app_id }}
+      INCLUDE_SAMPLES: ${{ github.event.client_payload.include_samples || github.event.inputs.include_samples || 'true' }}
+    steps:
+      - name: Debug info
+        run: |
+          echo "AppSignal Issue ID: ${{ env.ISSUE_ID }}"
+          echo "AppSignal App ID: ${{ env.APP_ID }}"
+          echo "Include samples: ${{ env.INCLUDE_SAMPLES }}"
+          echo "APPSIGNAL_API_KEY is set: ${{ secrets.APPSIGNAL_API_KEY != '' }}"
+
+      - name: Validate inputs
+        run: |
+          if [ -z "${{ env.ISSUE_ID }}" ]; then
+            echo "Error: issue_id is required"
+            exit 1
+          fi
+
+      - name: Run AppSignal Issue Analysis
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          mcp_config: |
+            {
+              "mcpServers": {
+                "appsignal": {
+                  "command": "docker",
+                  "args": ["run", "-i", "--rm", "-e", "APPSIGNAL_API_KEY", "appsignal/mcp:latest"],
+                  "env": {
+                    "APPSIGNAL_API_KEY": "${{ secrets.APPSIGNAL_API_KEY }}"
+                  }
+                }
+              }
+            }
+          prompt: |
+            Analyze AppSignal performance issue **#${{ env.ISSUE_ID }}** and provide a detailed report.
+
+            ## Instructions
+
+            1. **Fetch Issue Details**
+               Use the AppSignal MCP tools to retrieve the performance issue details:
+               - Get the issue information for issue ID: ${{ env.ISSUE_ID }}
+               ${{ env.APP_ID != '' && format('- Use App ID: {0}', env.APP_ID) || '- Use the default App ID from configuration' }}
+               ${{ env.INCLUDE_SAMPLES == 'true' && '- Retrieve sample traces/events for this issue' || '' }}
+
+            2. **Analyze the Issue**
+               Based on the retrieved data, analyze:
+               - What endpoint/action is affected
+               - The type of performance problem (slow response, high memory, etc.)
+               - Frequency and impact of the issue
+               - Timeline and when it started/worsened
+               - Any patterns in the sample traces
+
+            3. **Root Cause Analysis**
+               - Identify the likely root cause
+               - Look for common patterns (N+1 queries, slow external calls, memory bloat, etc.)
+               - Examine the breakdown of time spent in different parts of the request
+
+            4. **Provide Recommendations**
+               - Specific actionable fixes
+               - Code-level suggestions where possible
+               - Priority of the fix based on impact
+
+            ## Output Format
+
+            Provide your analysis as a structured markdown report with these sections:
+
+            ### Issue Summary
+            - Issue ID, name, and affected endpoint
+            - Severity and impact assessment
+            - First seen / last seen dates
+
+            ### Performance Metrics
+            - Mean/median response times
+            - Throughput
+            - Error rates if applicable
+            - Comparison to baseline/acceptable thresholds
+
+            ### Root Cause Analysis
+            - Detailed breakdown of where time is spent
+            - Identified bottlenecks
+            - Contributing factors
+
+            ### Sample Analysis
+            (If samples were included)
+            - Patterns observed across samples
+            - Outliers and their characteristics
+
+            ### Recommendations
+            Prioritized list of recommendations:
+            1. **Critical** - Must fix immediately
+            2. **High** - Should fix soon
+            3. **Medium** - Should fix when possible
+            4. **Low** - Nice to have improvements
+
+            ### Next Steps
+            - Suggested investigation paths
+            - Monitoring recommendations
+            - Success metrics to track after fixes
+
+            Output your complete analysis report. Format it as a detailed markdown document.
+          claude_args: "--model claude-sonnet-4-20250514"
