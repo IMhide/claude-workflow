@@ -77,7 +77,14 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
-          allowed_tools: "mcp__appsignal__*"
+          settings: |
+            {
+              "permissions": {
+                "allow": [
+                  "mcp__appsignal__*"
+                ]
+              }
+            }
           prompt: |
             Analyze AppSignal performance issue **#${{ env.ISSUE_ID }}** and provide a detailed report.
 
