@@ -1,0 +1,66 @@
+name: Create Performance Issue
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_id:
+        description: 'AppSignal Application ID (24-character hex string)'
+        required: true
+        type: string
+      issue_number:
+        description: 'AppSignal Incident Number'
+        required: true
+        type: string
+  repository_dispatch:
+    types: [create-performance-issue]
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set inputs from repository_dispatch
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          echo "APP_ID=${{ github.event.client_payload.app_id }}" >> $GITHUB_ENV
+          echo "ISSUE_NUMBER=${{ github.event.client_payload.issue_number }}" >> $GITHUB_ENV
+
+      - name: Set inputs from workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "APP_ID=${{ inputs.app_id }}" >> $GITHUB_ENV
+          echo "ISSUE_NUMBER=${{ inputs.issue_number }}" >> $GITHUB_ENV
+
+      - name: Make script executable
+        run: chmod +x .github/get_issue.js
+
+      - name: Run AppSignal CLI
+        env:
+          APPSIGNAL_API_KEY: ${{ secrets.APPSIGNAL_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching AppSignal incident $ISSUE_NUMBER from app $APP_ID..."
+          ./.github/get_issue.js "$APP_ID" "$ISSUE_NUMBER"
+
+      - name: Output result
+        if: success()
+        run: echo "✅ Performance issue created successfully!"
+
+      - name: Handle errors
+        if: failure()
+        run: |
+          echo "❌ Failed to create performance issue"
+          echo "Please check the logs above for details"
+          exit 1
