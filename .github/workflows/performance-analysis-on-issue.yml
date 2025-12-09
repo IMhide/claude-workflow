@@ -1,0 +1,264 @@
+name: Performance Analysis on Issue Creation
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read      # Read external repos
+  issues: write       # Post comments
+  id-token: write     # Claude Code OAuth
+
+jobs:
+  analyze-performance:
+    runs-on: ubuntu-latest
+    # Only run if issue contains YAML frontmatter
+    if: contains(github.event.issue.body, '---')
+    timeout-minutes: 20
+
+    steps:
+      # Step 1: Checkout this repository (for potential scripts if needed)
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      # Step 2: Parse YAML frontmatter to extract repository field
+      - name: Parse YAML frontmatter
+        id: parse-yaml
+        run: |
+          # Extract content between first --- and second ---
+          ISSUE_BODY="${{ github.event.issue.body }}"
+
+          # Parse YAML frontmatter
+          YAML_CONTENT=$(echo "$ISSUE_BODY" | sed -n '/^---$/,/^---$/p' | sed '1d;$d')
+
+          # Extract repository field
+          REPOSITORY=$(echo "$YAML_CONTENT" | grep -E '^repository:' | sed 's/^repository:[[:space:]]*//' | tr -d '\r\n')
+
+          # Validate format (owner/repo)
+          if [[ ! "$REPOSITORY" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+            echo "::error::Invalid or missing repository field in YAML frontmatter"
+            echo "::error::Expected format: repository: owner/repo"
+            exit 1
+          fi
+
+          echo "repository=$REPOSITORY" >> $GITHUB_OUTPUT
+          echo "Parsed repository: $REPOSITORY"
+
+      # Step 3: Validate repository access
+      - name: Validate repository access
+        run: |
+          REPO="${{ steps.parse-yaml.outputs.repository }}"
+          echo "Validating access to $REPO..."
+
+          # Check if repository exists and is accessible
+          gh repo view "$REPO" --json name,owner > /dev/null 2>&1 || {
+            echo "::error::Cannot access repository $REPO"
+            echo "::error::Ensure repository exists and GH_PAT has access"
+            exit 1
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      # Step 4: Checkout target repository
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.parse-yaml.outputs.repository }}
+          ref: main
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          path: target-repo
+
+      # Step 5: Run Claude Code Performance Analysis
+      - name: Run Performance Analysis with Claude Code
+        id: claude-analysis
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
+          working_directory: target-repo
+          prompt: |
+            You are analyzing repository **${{ steps.parse-yaml.outputs.repository }}** to investigate and provide recommendations for specific performance issues reported in GitHub issue #${{ github.event.issue.number }}.
+
+            ## Step 1: Read the Performance Issue Report
+
+            First, read the issue body from: ${{ github.event.issue.html_url }}
+
+            The issue contains a detailed performance report with:
+            - YAML frontmatter with repository information
+            - Performance metrics (response times, throughput, error rates)
+            - Critical information about the affected endpoint/action
+            - Sample traces showing where time is spent
+            - Possible N+1 query detection
+            - Resource allocation breakdown
+
+            **Parse the issue to extract**:
+            - Affected endpoint/action name
+            - Performance metrics (mean/median/p90/p95 response times)
+            - Identified bottlenecks (e.g., database queries, external API calls)
+            - Sample trace information
+            - Any N+1 queries or resource allocation issues
+
+            ## Step 2: Analyze the Repository
+
+            Based on the specific issues identified in the report:
+
+            ### 2.1 Locate the Problematic Code
+            - Find the endpoint/action mentioned in the report
+            - Locate controller/handler code for that specific endpoint
+            - Identify database queries, API calls, or operations mentioned in the trace
+            - Find related models, services, or helpers
+
+            ### 2.2 Identify Root Causes
+            Focus on the specific performance issues reported:
+            - If N+1 queries are mentioned: Find the exact queries and relationships
+            - If slow database queries: Analyze the specific query patterns
+            - If external API calls are slow: Identify the integration points
+            - If memory allocation is high: Find object creation patterns in that path
+            - If long response times: Trace the execution path to find bottlenecks
+
+            ### 2.3 Verify Against Samples
+            Cross-reference the code with the sample traces in the issue:
+            - Match method names and durations from samples to code
+            - Verify which components are taking the most time
+            - Identify if the issue is consistent across samples
+
+            ## Step 3: Generate Targeted Recommendations
+
+            Provide specific, actionable recommendations to fix the exact issues reported:
+
+            ### Root Cause Summary
+            - Clearly state what is causing the performance problem
+            - Reference specific files, lines, and code patterns
+            - Explain why this causes the performance degradation
+
+            ### Recommended Fixes (Prioritized)
+
+            For each issue identified in the report, provide:
+
+            #### Fix #1: [Descriptive Title]
+            **Problem**: Describe the specific issue (e.g., "N+1 query loading user associations")
+            **Location**: `path/to/file.rb:123-145`
+            **Current Impact**: [e.g., "Causing 50+ extra database queries per request"]
+
+            **Recommended Solution**:
+            Explain the fix approach (e.g., "Add eager loading with includes/preload")
+
+            **Implementation**:
+            ```language
+            # CURRENT CODE (causing N+1)
+            # Show the exact problematic code from the repository
+
+            # RECOMMENDED FIX
+            # Show the specific code change needed
+            ```
+
+            **Expected Improvement**: [e.g., "Reduce queries from 52 to 2, ~200ms faster"]
+            **Effort**: [Low/Medium/High]
+
+            #### Fix #2: [Next Most Important Fix]
+            [Same structure as above]
+
+            ### Additional Optimizations
+            - Quick wins that complement the main fixes
+            - Configuration changes (indexes, caching)
+            - Monitoring recommendations
+
+            ### Implementation Priority
+            1. **Critical** - Fix immediately (highest impact on reported issue)
+            2. **High** - Fix soon (addresses reported problem)
+            3. **Medium** - Valuable improvements
+            4. **Low** - Nice-to-have optimizations
+
+            ### Testing Recommendations
+            - How to verify the fixes work
+            - Metrics to monitor before/after
+            - Performance benchmarks to run
+
+            ## Output Requirements
+
+            - Be specific to the issues in the GitHub issue report
+            - Reference exact files, line numbers, and code patterns found
+            - Provide complete, copy-pasteable code fixes
+            - Explain the reasoning behind each recommendation
+            - Prioritize fixes by impact on the reported performance issue
+            - Format as clear markdown suitable for a GitHub comment
+
+            Start by reading the issue, then analyze the codebase for those specific problems.
+          claude_args: "--model claude-sonnet-4-20250514"
+
+      # Step 6: Post analysis results as comment
+      - name: Post analysis results as comment
+        if: success()
+        run: |
+          cat > comment.md << 'EOF'
+          ## :mag: Performance Analysis Results
+
+          Analysis completed for repository **${{ steps.parse-yaml.outputs.repository }}**
+
+          ---
+
+          ${{ steps.claude-analysis.outputs.response }}
+
+          ---
+
+          <sub>:robot: Analyzed by Claude Code • Triggered by issue creation • [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})</sub>
+          EOF
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --body-file comment.md \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 7: Add labels to issue
+      - name: Add labels to issue
+        if: success()
+        run: |
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label "performance-analysis,automated-analysis" \
+            --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 8: Handle analysis failure
+      - name: Handle analysis failure
+        if: failure()
+        run: |
+          cat > error-comment.md << 'EOF'
+          ## :warning: Performance Analysis Failed
+
+          The automatic performance analysis encountered an error.
+
+          **Repository**: `${{ steps.parse-yaml.outputs.repository }}`
+          **Workflow Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ### Troubleshooting
+
+          Please verify:
+          1. YAML frontmatter format is correct:
+             ```yaml
+             ---
+             repository: owner/repo
+             ---
+             ```
+          2. Repository exists and is accessible
+          3. Repository contains analyzable code
+
+          Check the workflow logs for detailed error information.
+          EOF
+
+          gh issue comment ${{ github.event.issue.number }} \
+            --body-file error-comment.md \
+            --repo ${{ github.repository }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 9: Debug information
+      - name: Debug information
+        if: always()
+        run: |
+          echo "=== Debug Information ==="
+          echo "Issue Number: ${{ github.event.issue.number }}"
+          echo "Repository: ${{ steps.parse-yaml.outputs.repository }}"
+          echo "Issue Author: ${{ github.event.issue.user.login }}"
+          echo "Workflow Status: ${{ job.status }}"
