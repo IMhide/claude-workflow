@@ -59,16 +59,35 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
-      # Step 4: Checkout target repository
+      # Step 4: Determine default branch
+      - name: Get default branch
+        id: get-branch
+        run: |
+          REPO="${{ steps.parse-yaml.outputs.repository }}"
+
+          # Get default branch from GitHub API
+          DEFAULT_BRANCH=$(gh repo view "$REPO" --json defaultBranchRef --jq '.defaultBranchRef.name')
+
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            echo "::warning::Could not determine default branch, using 'main'"
+            DEFAULT_BRANCH="main"
+          fi
+
+          echo "branch=$DEFAULT_BRANCH" >> $GITHUB_OUTPUT
+          echo "Default branch: $DEFAULT_BRANCH"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      # Step 5: Checkout target repository
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
           repository: ${{ steps.parse-yaml.outputs.repository }}
-          ref: main
+          ref: ${{ steps.get-branch.outputs.branch }}
           token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           path: target-repo
 
-      # Step 5: Run Claude Code Performance Analysis
+      # Step 6: Run Claude Code Performance Analysis
       - name: Run Performance Analysis with Claude Code
         id: claude-analysis
         uses: anthropics/claude-code-action@v1
@@ -186,7 +205,7 @@ jobs:
             Start by reading the issue, then analyze the codebase for those specific problems.
           claude_args: "--model claude-sonnet-4-20250514"
 
-      # Step 6: Post analysis results as comment
+      # Step 7: Post analysis results as comment
       - name: Post analysis results as comment
         if: success()
         run: |
@@ -210,7 +229,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 7: Add labels to issue
+      # Step 8: Add labels to issue
       - name: Add labels to issue
         if: success()
         run: |
@@ -220,7 +239,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 8: Handle analysis failure
+      # Step 9: Handle analysis failure
       - name: Handle analysis failure
         if: failure()
         run: |
@@ -253,7 +272,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 9: Debug information
+      # Step 10: Debug information
       - name: Debug information
         if: always()
         run: |
