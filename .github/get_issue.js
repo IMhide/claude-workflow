@@ -592,29 +592,11 @@ function generateIssueTitle(incident) {
   return `[Performance] ${action} - Slow response time (${duration})`;
 }
 
-function generateIssueLabels(incident) {
-  const labels = ['performance'];
 
-  if (incident.severity === 'critical') {
-    labels.push('critical');
-  } else if (incident.severity === 'warning') {
-    labels.push('high-priority');
-  }
-
-  if (incident.samples && incident.samples.some(s => s.hasNPlusOne)) {
-    labels.push('n+1-query');
-  }
-
-  labels.push('appsignal');
-
-  return labels;
-}
-
-async function createGitHubIssue(token, owner, repo, title, body, labels) {
+async function createGitHubIssue(token, owner, repo, title, body) {
   const issueData = {
     title: title,
-    body: body,
-    labels: labels || []
+    body: body
   };
 
   try {
@@ -788,15 +770,13 @@ async function main() {
 
     // 7. Create GitHub issue
     const title = generateIssueTitle(incident);
-    const labels = generateIssueLabels(incident);
 
     const result = await createGitHubIssue(
       env.githubToken,
       githubRepo.owner,
       githubRepo.repo,
       title,
-      markdownReport,
-      labels
+      markdownReport
     );
 
     // 8. Success output
