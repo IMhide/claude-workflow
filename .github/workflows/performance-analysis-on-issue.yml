@@ -229,17 +229,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 8: Add labels to issue
-      - name: Add labels to issue
-        if: success()
-        run: |
-          gh issue edit ${{ github.event.issue.number }} \
-            --add-label "performance-analysis,automated-analysis" \
-            --repo ${{ github.repository }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Step 9: Handle analysis failure
+      # Step 8: Handle analysis failure
       - name: Handle analysis failure
         if: failure()
         run: |
@@ -272,7 +262,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 10: Debug information
+      # Step 9: Debug information
       - name: Debug information
         if: always()
         run: |
