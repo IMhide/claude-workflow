@@ -40,6 +40,11 @@ function isValidIncidentNumber(number) {
   return !isNaN(num) && num > 0 && num.toString() === number;
 }
 
+function isValidRepoFormat(repo) {
+  // Format: owner/repo (e.g., "mycompany/api-service")
+  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo);
+}
+
 // ==============================================================================
 // FORMATTING UTILITIES
 // ==============================================================================
@@ -348,11 +353,21 @@ function validateIncidentType(graphqlResponse) {
 // MARKDOWN REPORT GENERATION
 // ==============================================================================
 
-function generateHeaderSection(incident, appId, incidentNumber) {
+function generateYAMLFrontmatter(targetRepo) {
+  return `---
+repository: ${targetRepo}
+---
+
+`;
+}
+
+function generateHeaderSection(incident, appId, incidentNumber, targetRepo) {
   const actionName = incident.actionNames && incident.actionNames[0] ? incident.actionNames[0] : 'Unknown Action';
+  const repoUrl = `https://github.com/${targetRepo}`;
 
   return `# Performance Issue: ${actionName}
 
+**Repository:** [${targetRepo}](${repoUrl})
 **Incident Number:** #${incidentNumber}
 **AppSignal ID:** ${incident.id}
 **App ID:** ${appId}
@@ -512,10 +527,14 @@ Average memory allocation by category:
   return markdown;
 }
 
-function generateMarkdownReport(incident, appId, incidentNumber) {
+function generateMarkdownReport(incident, appId, incidentNumber, targetRepo) {
   const sections = [];
 
-  sections.push(generateHeaderSection(incident, appId, incidentNumber));
+  // Add YAML frontmatter first
+  sections.push(generateYAMLFrontmatter(targetRepo));
+
+  // Add all sections with updated parameters
+  sections.push(generateHeaderSection(incident, appId, incidentNumber, targetRepo));
   sections.push(generateCriticalInfoSection(incident));
   sections.push(generatePerformanceMetricsSection(incident));
   sections.push(generateSamplesSection(incident.samples));
@@ -624,21 +643,25 @@ async function createGitHubIssue(token, owner, repo, title, body, labels) {
 
 function printUsageAndExit() {
   console.error(`
-Usage: node get_issue.js <APP_ID> <INCIDENT_NUMBER>
+Usage: node get_issue.js <APP_ID> <INCIDENT_NUMBER> <TARGET_REPO>
 
 Arguments:
   APP_ID           AppSignal application ID (24-character hex string)
   INCIDENT_NUMBER  Incident number (positive integer)
+  TARGET_REPO      Target repository where issue occurs (format: owner/repo)
 
 Environment Variables:
   APPSIGNAL_API_KEY  Required. Your AppSignal API key
-  GITHUB_TOKEN       Required. GitHub personal access token
-  GITHUB_REPO        Optional. Repository in format "owner/repo" (default: auto-detect from git)
+  GH_TOKEN           Required. GitHub personal access token
+  GITHUB_REPO        Optional. Override where to create the issue (default: auto-detect from git)
   DEBUG              Optional. Enable debug logging
 
 Examples:
-  node get_issue.js 64cb678083eb67f665b627b0 123
-  APPSIGNAL_API_KEY=xxx GITHUB_TOKEN=yyy node get_issue.js 64cb678083eb67f665b627b0 123
+  node get_issue.js 64cb678083eb67f665b627b0 123 mycompany/api-service
+  APPSIGNAL_API_KEY=xxx GH_TOKEN=yyy node get_issue.js 64cb678083eb67f665b627b0 123 mycompany/api-service
+
+Note: The TARGET_REPO is for informational purposes only. The GitHub issue will be
+created in the repository detected from git (or GITHUB_REPO if set), NOT in the target repo.
 `);
   process.exit(1);
 }
@@ -646,11 +669,11 @@ Examples:
 function parseCliArguments() {
   const args = process.argv.slice(2);
 
-  if (args.length !== 2) {
+  if (args.length !== 3) {
     printUsageAndExit();
   }
 
-  const [appId, incidentNumber] = args;
+  const [appId, incidentNumber, targetRepo] = args;
 
   if (!isValidAppId(appId)) {
     console.error('ERROR: Invalid APP_ID format (expected 24-character hex string)');
@@ -662,7 +685,12 @@ function parseCliArguments() {
     process.exit(1);
   }
 
-  return { appId, incidentNumber };
+  if (!isValidRepoFormat(targetRepo)) {
+    console.error('ERROR: Invalid TARGET_REPO format (expected owner/repo)');
+    process.exit(1);
+  }
+
+  return { appId, incidentNumber, targetRepo };
 }
 
 function validateEnvironment() {
@@ -672,8 +700,8 @@ function validateEnvironment() {
     errors.push('APPSIGNAL_API_KEY environment variable is required');
   }
 
-  if (!process.env.GITHUB_TOKEN) {
-    errors.push('GITHUB_TOKEN environment variable is required');
+  if (!process.env.GH_TOKEN) {
+    errors.push('GH_TOKEN environment variable is required');
   }
 
   if (errors.length > 0) {
@@ -685,7 +713,7 @@ function validateEnvironment() {
 
   return {
     appsignalApiKey: process.env.APPSIGNAL_API_KEY,
-    githubToken: process.env.GITHUB_TOKEN,
+    githubToken: process.env.GH_TOKEN,
     githubRepo: process.env.GITHUB_REPO || null
   };
 }
@@ -724,13 +752,13 @@ function handleError(error) {
 
 async function main() {
   try {
-    // 1. Parse CLI arguments
-    const { appId, incidentNumber } = parseCliArguments();
+    // 1. Parse CLI arguments (now includes targetRepo)
+    const { appId, incidentNumber, targetRepo } = parseCliArguments();
 
     // 2. Validate environment variables
     const env = validateEnvironment();
 
-    // 3. Detect GitHub repository
+    // 3. Detect GitHub repository (for issue creation)
     const githubRepo = detectGitHubRepo(env.githubRepo);
 
     console.log('Fetching incident data from AppSignal...');
@@ -753,8 +781,8 @@ async function main() {
 
     console.log('Generating markdown report...');
 
-    // 6. Generate markdown report
-    const markdownReport = generateMarkdownReport(incident, appId, incidentNumber);
+    // 6. Generate markdown report (now with targetRepo)
+    const markdownReport = generateMarkdownReport(incident, appId, incidentNumber, targetRepo);
 
     console.log('Creating GitHub issue...');
 
@@ -775,6 +803,7 @@ async function main() {
     console.log('\n✅ Success!');
     console.log(`GitHub Issue: ${result.url}`);
     console.log(`Issue Number: #${result.number}`);
+    console.log(`Target Repository: ${targetRepo}`);
 
     process.exit(0);
 

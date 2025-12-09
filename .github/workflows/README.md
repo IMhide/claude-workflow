@@ -17,6 +17,7 @@ The workflow can be triggered in two ways:
 5. Fill in the required inputs:
    - **app_id**: Your AppSignal Application ID (24-character hex string)
    - **issue_number**: The AppSignal Incident Number
+   - **target_repo**: Target repository where the issue occurs (format: owner/repo)
 6. Click **Run workflow**
 
 #### 2. API Trigger (repository_dispatch)
@@ -33,7 +34,8 @@ curl -X POST \
     "event_type": "create-performance-issue",
     "client_payload": {
       "app_id": "64cb678083eb67f665b627b0",
-      "issue_number": "1173"
+      "issue_number": "1173",
+      "target_repo": "mycompany/api-service"
     }
   }'
 ```
@@ -58,7 +60,8 @@ curl -X POST \
     "ref": "master",
     "inputs": {
       "app_id": "64cb678083eb67f665b627b0",
-      "issue_number": "1173"
+      "issue_number": "1173",
+      "target_repo": "mycompany/api-service"
     }
   }'
 ```
@@ -72,9 +75,11 @@ Make sure these secrets are configured in your repository:
    - Get it from: https://appsignal.com/accounts
    - Add to: Repository Settings → Secrets and variables → Actions → New repository secret
 
-2. **GITHUB_TOKEN**
-   - Automatically provided by GitHub Actions
-   - Has permissions set in the workflow: `contents: read`, `issues: write`
+2. **GH_TOKEN**
+   - Your GitHub Personal Access Token
+   - Required scopes: `repo` (or `public_repo`) and `workflow`
+   - Add to: Repository Settings → Secrets and variables → Actions → New repository secret
+   - Note: Cannot use `GITHUB_TOKEN` as secret name (reserved by GitHub)
 
 ### Setup Instructions
 
@@ -85,10 +90,16 @@ Make sure these secrets are configured in your repository:
    Value: your_appsignal_api_key
    ```
 
-2. **Ensure GITHUB_TOKEN has permissions:**
-   - Go to Repository Settings → Actions → General
-   - Under "Workflow permissions", ensure "Read and write permissions" is selected
-   - OR use the fine-grained permissions in the workflow (already configured)
+2. **Add GitHub Token Secret:**
+   ```
+   Repository Settings → Secrets and variables → Actions → New repository secret
+   Name: GH_TOKEN
+   Value: your_github_personal_access_token
+
+   Note: The token must have these scopes:
+   - repo (or public_repo for public repos)
+   - workflow
+   ```
 
 3. **Test the workflow:**
    - Use Manual Trigger from GitHub UI first to verify it works
@@ -98,13 +109,16 @@ Make sure these secrets are configured in your repository:
 
 When successful, the workflow will:
 - ✅ Fetch incident data from AppSignal
-- ✅ Generate comprehensive markdown report with 6 sections:
-  1. Header with incident metadata
-  2. Critical information table
-  3. Performance metrics (min/max/avg/median)
-  4. Detailed sample analysis (up to 10 samples)
-  5. N+1 query detection
-  6. Resource allocation analysis
+- ✅ Generate comprehensive markdown report with:
+  - YAML frontmatter with target repository
+  - Header with target repository link
+  - 6 detailed sections:
+    1. Header with incident metadata
+    2. Critical information table
+    3. Performance metrics (min/max/avg/median)
+    4. Detailed sample analysis (up to 10 samples)
+    5. N+1 query detection
+    6. Resource allocation analysis
 - ✅ Create a GitHub issue with:
   - Title: `[Performance] ActionName - Slow response time (duration)`
   - Labels: `performance`, `appsignal`, severity-based, `n+1-query` (if detected)
@@ -134,7 +148,8 @@ curl -X POST \
     "event_type": "create-performance-issue",
     "client_payload": {
       "app_id": "64cb678083eb67f665b627b0",
-      "issue_number": "1173"
+      "issue_number": "1173",
+      "target_repo": "mycompany/api-service"
     }
   }'
 ```
@@ -143,7 +158,8 @@ curl -X POST \
 ```bash
 gh workflow run create-performance-issue.yml \
   -f app_id=64cb678083eb67f665b627b0 \
-  -f issue_number=1173
+  -f issue_number=1173 \
+  -f target_repo=mycompany/api-service
 ```
 
 **Via webhook/automation service:**

@@ -11,6 +11,10 @@ on:
         description: 'AppSignal Incident Number'
         required: true
         type: string
+      target_repo:
+        description: 'Target repository where the issue occurs (format: owner/repo)'
+        required: true
+        type: string
   repository_dispatch:
     types: [create-performance-issue]
 
@@ -36,12 +40,14 @@ jobs:
         run: |
           echo "APP_ID=${{ github.event.client_payload.app_id }}" >> $GITHUB_ENV
           echo "ISSUE_NUMBER=${{ github.event.client_payload.issue_number }}" >> $GITHUB_ENV
+          echo "TARGET_REPO=${{ github.event.client_payload.target_repo }}" >> $GITHUB_ENV
 
       - name: Set inputs from workflow_dispatch
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "APP_ID=${{ inputs.app_id }}" >> $GITHUB_ENV
           echo "ISSUE_NUMBER=${{ inputs.issue_number }}" >> $GITHUB_ENV
+          echo "TARGET_REPO=${{ inputs.target_repo }}" >> $GITHUB_ENV
 
       - name: Make script executable
         run: chmod +x .github/get_issue.js
@@ -49,10 +55,10 @@ jobs:
       - name: Run AppSignal CLI
         env:
           APPSIGNAL_API_KEY: ${{ secrets.APPSIGNAL_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          echo "Fetching AppSignal incident $ISSUE_NUMBER from app $APP_ID..."
-          ./.github/get_issue.js "$APP_ID" "$ISSUE_NUMBER"
+          echo "Fetching AppSignal incident $ISSUE_NUMBER from app $APP_ID for repository $TARGET_REPO..."
+          ./.github/get_issue.js "$APP_ID" "$ISSUE_NUMBER" "$TARGET_REPO"
 
       - name: Output result
         if: success()
