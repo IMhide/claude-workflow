@@ -228,7 +228,7 @@ jobs:
           echo "Working directory contents:"
           ls -la target-repo/ || echo "target-repo directory not accessible"
 
-          OUTPUT_FILE="analysis-output.md"
+          OUTPUT_FILE="./analysis-output.md"
           if [ -f "$OUTPUT_FILE" ]; then
             echo "✅ Output file exists"
             echo "File size: $(wc -c < "$OUTPUT_FILE") bytes"
@@ -236,8 +236,8 @@ jobs:
             head -n 10 "$OUTPUT_FILE"
           else
             echo "❌ Output file not found at: $OUTPUT_FILE"
-            echo "Searching for .md files in target-repo:"
-            find target-repo -name "*.md" -type f 2>/dev/null || echo "No .md files found"
+            echo "Searching for analysis-output.md files:"
+            find . -name "analysis-output.md" -type f 2>/dev/null || echo "No analysis-output.md files found"
           fi
 
       # Step 7: Post analysis results as comment
@@ -245,7 +245,7 @@ jobs:
         if: success()
         run: |
           # Define the output file path
-          OUTPUT_FILE="analysis-output.md"
+          OUTPUT_FILE="./analysis-output.md"
 
           # Check if Claude Code created the output file
           if [ -f "$OUTPUT_FILE" ]; then
@@ -316,7 +316,7 @@ jobs:
           echo "=== Failure Debugging ==="
           echo "Checking for partial output file..."
 
-          OUTPUT_FILE="target-repo/analysis-output.md"
+          OUTPUT_FILE="./analysis-output.md"
 
           # Check if partial output exists
           if [ -f "$OUTPUT_FILE" ]; then
