@@ -228,7 +228,7 @@ jobs:
           echo "Working directory contents:"
           ls -la target-repo/ || echo "target-repo directory not accessible"
 
-          OUTPUT_FILE="target-repo/analysis-output.md"
+          OUTPUT_FILE="analysis-output.md"
           if [ -f "$OUTPUT_FILE" ]; then
             echo "✅ Output file exists"
             echo "File size: $(wc -c < "$OUTPUT_FILE") bytes"
@@ -245,7 +245,7 @@ jobs:
         if: success()
         run: |
           # Define the output file path
-          OUTPUT_FILE="target-repo/analysis-output.md"
+          OUTPUT_FILE="analysis-output.md"
 
           # Check if Claude Code created the output file
           if [ -f "$OUTPUT_FILE" ]; then
