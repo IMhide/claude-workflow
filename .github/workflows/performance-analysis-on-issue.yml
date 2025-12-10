@@ -226,7 +226,7 @@ jobs:
         run: |
           echo "=== Checking for Claude Code output ==="
           echo "Working directory contents:"
-          ls -la target-repo/ || echo "target-repo directory not accessible"
+          ls -la .
 
           OUTPUT_FILE="./analysis-output.md"
           if [ -f "$OUTPUT_FILE" ]; then
