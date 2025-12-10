@@ -218,7 +218,7 @@ jobs:
             **File path**: `analysis-output.md` (relative to working directory)
 
             After writing the file, confirm it was created successfully.
-          claude_args: "--model claude-sonnet-4-20250514"
+          claude_args: "--model claude-sonnet-4-20250514 --permission-mode bypassPermissions"
 
       # Step 6.5: Verify output file creation
       - name: Verify Claude Code output
