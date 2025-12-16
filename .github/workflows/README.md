@@ -1,12 +1,14 @@
-# GitHub Actions - Performance Analysis Pipeline
+# GitHub Actions - Performance Analysis & Implementation Pipeline
 
-This directory contains workflows for automated performance issue analysis:
+This directory contains workflows for automated performance issue analysis and implementation:
 - **Stage 1**: Fetches AppSignal performance data and creates GitHub issues
 - **Stage 2**: Analyzes the codebase with Claude Code and posts recommendations
+- **Stage 3**: Creates implementation plan based on analysis (triggered by label)
+- **Stage 4**: Implements the plan and creates PR (triggered by label)
 
 ## Architecture Overview
 
-The system uses a two-stage pipeline:
+The system uses a four-stage pipeline:
 
 ```
 Stage 1: Issue Creation (~30 seconds)
@@ -39,10 +41,54 @@ Stage 2: Codebase Analysis (5-10 minutes)
 ┌──────────────────────┐
 │   GitHub Comment     │
 │  (Recommendations)   │
+└──────────┬───────────┘
+           │
+           │ Add label "ready-to-plan"
+           ▼
+Stage 3: Implementation Planning (15-25 minutes)
+┌─────────────────────┐
+│   Planning Workflow │
+│ (label: ready-to-plan)
+└──────────┬──────────┘
+           │
+           ▼
+┌──────────────────────┐
+│    Claude Code       │
+│  Creates impl. plan  │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│   GitHub Comment     │
+│ (Implementation Plan)│
+└──────────┬───────────┘
+           │
+           │ Add label "ready-for-pr"
+           ▼
+Stage 4: Implementation (30-60 minutes)
+┌─────────────────────┐
+│ Implementation Flow │
+│ (label: ready-for-pr)
+└──────────┬──────────┘
+           │
+           ▼
+┌──────────────────────┐
+│    Claude Code       │
+│  Implements feature  │
+│   (creates branch)   │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│    Pull Request      │
+│   (Target Repo)      │
 └──────────────────────┘
 ```
 
-**Key Integration Point:** YAML frontmatter in the GitHub issue connects Stage 1 to Stage 2.
+**Key Integration Points:**
+- YAML frontmatter in the GitHub issue connects Stage 1 to Stage 2
+- Labels trigger Stage 3 (`ready-to-plan`) and Stage 4 (`ready-for-pr`)
+- Implementation plan in comments guides Stage 4
 
 ---
 
@@ -591,17 +637,237 @@ If issues persist:
 
 ---
 
+## Stage 3: Implementation Planning
+
+Workflow file: `create-implementation-plan.yml`
+
+### Overview
+
+- **Purpose**: Creates a comprehensive implementation plan for fixing the performance issue
+- **Trigger**: Manual - add the `ready-to-plan` label to an issue
+- **Technology**: Claude Code with specialized implementation planning prompts
+- **Output**: Detailed implementation plan posted as a comment
+- **Duration**: 15-25 minutes
+
+### How It Works
+
+1. **Parse YAML Frontmatter**: Extracts target repository from issue
+2. **Fetch Issue Comments**: Retrieves all comments including analysis results
+3. **Validate Repository**: Ensures repository access
+4. **Checkout Target Repo**: Clones repository for exploration
+5. **Run Claude Code**: Creates comprehensive implementation plan
+6. **Post Comment**: Adds plan to issue as a comment
+
+### Implementation Plan Structure
+
+The generated plan includes:
+
+- **Overview**: Complexity, effort estimate, dependencies
+- **Feature Summary**: Clear description of what needs to be built
+- **Discussion Summary**: Key decisions from comments
+- **Technical Approach**: Architecture, design decisions, data flow
+- **Files to Create/Modify**: Detailed list with purpose and complexity
+- **Implementation Tasks**: Broken down into phases (Foundation, Core, Testing, Documentation)
+- **Testing Strategy**: Unit tests, integration tests, manual testing checklist
+- **Edge Cases & Error Handling**: Specific scenarios to handle
+- **Security Considerations**: Authentication, authorization, input validation
+- **Performance Considerations**: Database queries, caching, scalability
+- **Deployment Considerations**: Migrations, configuration, documentation
+- **Success Metrics**: Definition of done and acceptance criteria
+
+### Usage
+
+1. Review the performance analysis from Stage 2
+2. Add the `ready-to-plan` label to the issue
+3. Wait 15-25 minutes for planning to complete
+4. Review the implementation plan in the comments
+5. If approved, proceed to Stage 4 by adding `ready-for-pr` label
+
+### Configuration
+
+- **Claude Model**: `claude-sonnet-4-20250514`
+- **Timeout**: 25 minutes
+- **System Prompt**: `.github/prompts/implementation-plan-system.md`
+- **Output**: Plan posted as issue comment
+
+---
+
+## Stage 4: Implementation & PR Creation
+
+Workflow file: `implement-from-plan.yml`
+
+### Overview
+
+- **Purpose**: Implements the feature following the implementation plan and creates a PR
+- **Trigger**: Manual - add the `ready-for-pr` label to an issue
+- **Technology**: Claude Code with implementation system prompts
+- **Output**: Pull request in the target repository
+- **Duration**: 30-60 minutes
+
+### How It Works
+
+1. **Parse YAML Frontmatter**: Extracts target repository from issue
+2. **Fetch Issue Comments**: Retrieves implementation plan from comments
+3. **Validate Repository**: Ensures repository access
+4. **Checkout Target Repo**: Clones repository
+5. **Create Branch**: Creates `performance/issue-<number>` branch
+6. **Run Claude Code**: Implements the feature following the plan
+   - Reads implementation plan from comments
+   - Creates/modifies files as specified
+   - Writes tests
+   - Makes atomic commits
+7. **Push Branch**: Pushes changes to target repository
+8. **Create Pull Request**: Opens PR with implementation
+9. **Post Comment**: Updates issue with PR link
+
+### Branch Naming
+
+- Format: `performance/issue-<number>`
+- Example: `performance/issue-123`
+
+### Implementation Process
+
+Claude Code will:
+
+- **Phase 1**: Foundation setup and prerequisites
+- **Phase 2**: Core feature implementation
+- **Phase 3**: Testing and polish
+- **Phase 4**: Documentation updates
+
+Each phase includes:
+- Creating new files as specified
+- Modifying existing files
+- Writing comprehensive tests
+- Making atomic commits with clear messages
+
+### Pull Request Format
+
+**Title**: `[Performance] <issue title>`
+
+**Body includes**:
+- Link to original issue
+- Implementation summary
+- Review checklist
+- Notes for reviewers
+
+### Error Handling
+
+The workflow always creates a PR even if:
+- Tests fail (reviewers can fix)
+- Build errors occur (documented in PR)
+- Partial implementation (progress is saved)
+
+This "best effort" approach ensures progress is captured and human reviewers can complete or fix any issues.
+
+### Usage
+
+1. Review the implementation plan from Stage 3
+2. Add the `ready-for-pr` label to the issue
+3. Wait 30-60 minutes for implementation to complete
+4. Review the pull request in the target repository
+5. Merge when approved
+
+### Configuration
+
+- **Claude Model**: `claude-sonnet-4-20250514`
+- **Timeout**: 60 minutes
+- **System Prompt**: `.github/prompts/implementation-system.md`
+- **Permission Mode**: `bypassPermissions` (for target repo access)
+- **Branch**: `performance/issue-<number>`
+
+### Required Permissions
+
+```yaml
+permissions:
+  contents: write     # Create branches and push
+  issues: write       # Post comments
+  pull-requests: write # Create pull requests
+  id-token: write     # Claude Code OAuth
+```
+
+**Important**: The workflow requires `GH_PAT` secret with write access to the target repository.
+
+---
+
+## Complete Workflow Sequence
+
+Here's how all four stages work together:
+
+### 1. Initial Setup (One-time)
+
+```bash
+# Configure secrets (see Required Secrets section)
+# - APPSIGNAL_API_KEY
+# - GH_TOKEN
+# - CLAUDE_CODE_OAUTH_TOKEN
+# - GH_PAT
+```
+
+### 2. Automated Issue Creation
+
+```bash
+# Trigger Stage 1 via API or GitHub UI
+gh workflow run create-performance-issue.yml \
+  -f app_id=64cb678083eb67f665b627b0 \
+  -f issue_number=1173 \
+  -f target_repo=mycompany/api-service
+```
+
+Result: Issue created with YAML frontmatter
+
+### 3. Automatic Analysis
+
+Stage 2 triggers automatically when issue is created (if YAML frontmatter present)
+
+Result: Analysis comment posted to issue
+
+### 4. Create Implementation Plan
+
+```bash
+# Add label to issue
+gh issue edit <issue-number> --add-label "ready-to-plan"
+```
+
+Result: Implementation plan comment posted to issue
+
+### 5. Implement & Create PR
+
+```bash
+# Add label to issue
+gh issue edit <issue-number> --add-label "ready-for-pr"
+```
+
+Result:
+- Branch created: `performance/issue-<number>`
+- Code implemented following plan
+- Tests written
+- PR created in target repository
+- Issue updated with PR link
+
+### 6. Review & Merge
+
+- Review the PR in target repository
+- Run additional tests if needed
+- Request changes if necessary
+- Merge when approved
+
+---
+
 ## Files in This Directory
 
 **Workflows:**
 - `create-performance-issue.yml` - Stage 1: Fetch AppSignal data and create issues
 - `performance-analysis-on-issue.yml` - Stage 2: Original analysis workflow (embedded prompt)
 - `performance-analysis-on-issue-optimized.yml` - Stage 2: Optimized workflow (external prompt, 93% token reduction)
+- `create-implementation-plan.yml` - Stage 3: Create implementation plan from analysis
+- `implement-from-plan.yml` - Stage 4: Implement feature and create PR
 
 **Scripts:**
 - `get_issue.js` - Node.js script for fetching AppSignal performance incidents via GraphQL API
 
 **Related Files:**
-- `.github/prompts/rails-codebase-analysis-system.md` - System prompt for optimized workflow
+- `.github/prompts/rails-codebase-analysis-system.md` - System prompt for Stage 2 (optimized)
+- `.github/prompts/implementation-plan-system.md` - System prompt for Stage 3 (planning)
+- `.github/prompts/implementation-system.md` - System prompt for Stage 4 (implementation)
 - `.github/prompts/README.md` - Documentation for customizing analysis prompts
 - `.github/prompts/github-workflow-comparison.md` - Detailed comparison and migration guide
