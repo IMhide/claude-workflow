@@ -15,8 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     # Only run if ready-for-pr label is added AND issue contains YAML frontmatter
     if: |
-      github.event.label.name == 'ready-for-pr' &&
-      contains(github.event.issue.body, '---')
+      github.event.label.name == 'ready-for-pr'
     timeout-minutes: 60
 
     steps:
