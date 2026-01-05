@@ -166,6 +166,7 @@ jobs:
             2. Read the implementation plan from `/tmp/issue-comments.md`
                - The plan was posted as a comment and contains phases, tasks, and technical details
                - Look for the "Implementation Plan" heading in the comments
+               - If multiple plans exist, use only the most recent one
             3. Analyze the codebase structure and locate files mentioned in the plan
             4. Execute each phase and task in the implementation plan:
                - Phase 1: Foundation tasks
@@ -178,6 +179,7 @@ jobs:
             8. Make atomic commits with clear messages for each logical unit of work
 
             **IMPORTANT**:
+            - When multiple implementation plans exist, implement only the most recent one
             - Make commits as you complete tasks (use git commands)
             - DO NOT open a pull request - the workflow will handle that
             - If you encounter issues, document them and continue with other tasks
